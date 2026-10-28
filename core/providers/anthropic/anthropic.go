@@ -1117,6 +1117,10 @@ func HandleAnthropicChatCompletionStreaming(
 		// can bill for tokens already processed Mutated in place below;
 		// the deferred HandleStreamCancellation/Timeout reads it from context.
 		ctx.SetValue(schemas.BifrostContextKeyStreamAccumulatedUsage, usage)
+		// Counts usage events so a cancelled stream can tell the provisional
+		// message_start output count from a message_delta one.
+		usageUpdates := 0
+		ctx.SetValue(schemas.BifrostContextKeyStreamUsageUpdates, usageUpdates)
 
 		// Fold cached tokens into prompt/total exactly once at stream end. The EOF
 		// path calls normalizeUsage() after the loop; on a mid-stream cancel/timeout
@@ -1163,6 +1167,9 @@ func HandleAnthropicChatCompletionStreaming(
 					return
 				}
 				if readErr != io.EOF {
+					// A read error (an idle timeout among them) leaves ctx live, so the
+					// deferred normalization would run after the error post-hook.
+					normalizeUsage()
 					ctx.SetValue(schemas.BifrostContextKeyStreamEndIndicator, true)
 					logger.Warn("Error reading %s stream: %v", providerName, readErr)
 					providerUtils.ProcessAndSendError(ctx, postHookRunner, readErr, responseChan, logger, postHookSpanFinalizer)
@@ -1195,6 +1202,8 @@ func HandleAnthropicChatCompletionStreaming(
 				usageToProcess = event.Message.Usage
 			}
 			if usageToProcess != nil {
+				usageUpdates++
+				ctx.SetValue(schemas.BifrostContextKeyStreamUsageUpdates, usageUpdates)
 				if served := usageToProcess.ServerSideFallbackModel(); served != nil {
 					servedFallbackModel = served
 					usage.ServerSideFallbackModel = served
@@ -1807,6 +1816,10 @@ func HandleAnthropicResponsesStream(
 		// can bill for Anthropic Responses usage already reported by message_start
 		// or message_delta events before the stream was interrupted.
 		ctx.SetValue(schemas.BifrostContextKeyStreamAccumulatedUsage, billedUsage)
+		// Counts usage events so a cancelled stream can tell the provisional
+		// message_start output count from a message_delta one.
+		usageUpdates := 0
+		ctx.SetValue(schemas.BifrostContextKeyStreamUsageUpdates, usageUpdates)
 
 		usageNormalized := false
 		normalizeBilledUsage := func() {
@@ -1858,6 +1871,9 @@ func HandleAnthropicResponsesStream(
 					return
 				}
 				if readErr != io.EOF {
+					// A read error (an idle timeout among them) leaves ctx live, so the
+					// deferred normalization would run after the error post-hook.
+					normalizeBilledUsage()
 					ctx.SetValue(schemas.BifrostContextKeyStreamEndIndicator, true)
 					logger.Warn("Error reading %s stream: %v", providerName, readErr)
 					providerUtils.ProcessAndSendError(ctx, postHookRunner, readErr, responseChan, logger, postHookSpanFinalizer)
@@ -1911,6 +1927,8 @@ func HandleAnthropicResponsesStream(
 			}
 
 			if usageToProcess != nil {
+				usageUpdates++
+				ctx.SetValue(schemas.BifrostContextKeyStreamUsageUpdates, usageUpdates)
 				// Collect usage information and send at the end of the stream.
 				// Also mirror it into billedUsage so cancellation/timeout paths can
 				// charge for provider-reported usage before the final chunk arrives.
