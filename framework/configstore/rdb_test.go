@@ -38,6 +38,7 @@ func setupRDBTestStore(t *testing.T) *RDBConfigStore {
 		&tables.TableRoutingRule{},
 		&tables.TableRoutingTarget{},
 		&tables.TablePricingOverride{},
+		&tables.TableDatasheetOverride{},
 		&tables.TableVirtualKey{},
 		&tables.TableVirtualKeyProviderConfig{},
 		&tables.TableVirtualKeyProviderConfigKey{},
@@ -6933,4 +6934,45 @@ func TestUpdateMCPClientConfig_KeepsPerUserDiscoveryWhenUnset(t *testing.T) {
 	row.PerUserDiscovery = schemas.Ptr(false)
 	require.NoError(t, store.UpdateMCPClientConfig(ctx, "pud-client", row))
 	assert.Equal(t, schemas.Ptr(false), stored(), "an update can turn the flag off")
+}
+
+// Saving by target updates the existing row in place: same ID and created_at,
+// new patches. Delete reports a missing row as ErrNotFound.
+func TestDatasheetOverride_UpsertByTargetAndDelete(t *testing.T) {
+	ctx := context.Background()
+	store := setupRDBTestStore(t)
+
+	first := &tables.TableDatasheetOverride{
+		ID: "first", Provider: "openai", Model: "gpt-4o", Mode: "chat",
+		PricingPatch: json.RawMessage(`{"context_length":64000}`),
+	}
+	require.NoError(t, store.UpsertDatasheetOverride(ctx, first))
+	other := &tables.TableDatasheetOverride{
+		ID: "other", Provider: "openai", Model: "gpt-4o", Mode: "responses",
+		ParamsPatch: json.RawMessage(`{"supports_mcp":true}`),
+	}
+	require.NoError(t, store.UpsertDatasheetOverride(ctx, other))
+
+	again := &tables.TableDatasheetOverride{
+		ID: "ignored-new-id", Provider: "openai", Model: "gpt-4o", Mode: "chat",
+		PricingPatch: json.RawMessage(`{"context_length":32000}`),
+		Baseline:     json.RawMessage(`{"pricing":{"context_length":128000}}`),
+	}
+	require.NoError(t, store.UpsertDatasheetOverride(ctx, again))
+	assert.Equal(t, "first", again.ID, "a save for an existing target keeps that row's ID")
+
+	rows, err := store.GetDatasheetOverrides(ctx)
+	require.NoError(t, err)
+	require.Len(t, rows, 2)
+	got, err := store.GetDatasheetOverrideByID(ctx, "first")
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"context_length":32000}`, string(got.PricingPatch))
+	assert.JSONEq(t, `{"pricing":{"context_length":128000}}`, string(got.Baseline))
+	assert.Nil(t, got.ParamsPatch)
+	assert.Equal(t, first.CreatedAt.Unix(), got.CreatedAt.Unix())
+
+	require.NoError(t, store.DeleteDatasheetOverride(ctx, "first"))
+	require.ErrorIs(t, store.DeleteDatasheetOverride(ctx, "first"), ErrNotFound)
+	_, err = store.GetDatasheetOverrideByID(ctx, "first")
+	require.ErrorIs(t, err, ErrNotFound)
 }
