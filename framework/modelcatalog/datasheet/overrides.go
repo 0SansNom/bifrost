@@ -556,6 +556,13 @@ func patchPricing(pricing configstoreTables.TableModelPricing, override Options)
 		{dst: &patched.CacheCreationInputTokenCostAbove272kTokensUltrafast, src: override.CacheCreationInputTokenCostAbove272kTokensUltrafast},
 		{dst: &patched.CacheCreationInputTokenCostFast, src: override.CacheCreationInputTokenCostFast},
 		{dst: &patched.CacheCreationInputTokenCostAbove1hrFast, src: override.CacheCreationInputTokenCostAbove1hrFast},
+		{dst: &patched.CacheCreationInputTokenCostAbove1hrAbove272kTokens, src: override.CacheCreationInputTokenCostAbove1hrAbove272kTokens},
+		{dst: &patched.CacheCreationInputTokenCostAbove1hrPriority, src: override.CacheCreationInputTokenCostAbove1hrPriority},
+		{dst: &patched.CacheCreationInputTokenCostAbove1hrAbove272kTokensPriority, src: override.CacheCreationInputTokenCostAbove1hrAbove272kTokensPriority},
+		{dst: &patched.CacheCreationInputTokenCostAbove1hrFlex, src: override.CacheCreationInputTokenCostAbove1hrFlex},
+		{dst: &patched.CacheCreationInputTokenCostAbove1hrFlexAbove272kTokens, src: override.CacheCreationInputTokenCostAbove1hrFlexAbove272kTokens},
+		{dst: &patched.CacheCreationInputTokenCostAbove1hrUltrafast, src: override.CacheCreationInputTokenCostAbove1hrUltrafast},
+		{dst: &patched.CacheCreationInputTokenCostAbove1hrAbove272kTokensUltrafast, src: override.CacheCreationInputTokenCostAbove1hrAbove272kTokensUltrafast},
 		{dst: &patched.CacheReadInputTokenCostFast, src: override.CacheReadInputTokenCostFast},
 		{dst: &patched.InferenceGeoUSMultiplier, src: override.InferenceGeoUSMultiplier},
 

@@ -1093,6 +1093,29 @@ func TestPatchPricing_VideoTokenRate(t *testing.T) {
 	assert.Equal(t, 0.0000077, *patched.OutputCostPerVideoToken)
 }
 
+func TestPatchPricing_CacheCreationAbove1hrTierFields(t *testing.T) {
+	base := configstoreTables.TableModelPricing{Model: "gpt-5.6-sol", Provider: "openai", Mode: "chat"}
+	patched := patchPricing(base, Options{
+		CacheCreationInputTokenCostAbove1hrAbove272kTokens:          bifrost.Ptr(0.00002),
+		CacheCreationInputTokenCostAbove1hrPriority:                 bifrost.Ptr(0.00002),
+		CacheCreationInputTokenCostAbove1hrAbove272kTokensPriority:  bifrost.Ptr(0.00004),
+		CacheCreationInputTokenCostAbove1hrFlex:                     bifrost.Ptr(0.000005),
+		CacheCreationInputTokenCostAbove1hrFlexAbove272kTokens:      bifrost.Ptr(0.00001),
+		CacheCreationInputTokenCostAbove1hrUltrafast:                bifrost.Ptr(0.00015),
+		CacheCreationInputTokenCostAbove1hrAbove272kTokensUltrafast: bifrost.Ptr(0.0003),
+	})
+	require.NotNil(t, patched.CacheCreationInputTokenCostAbove1hrUltrafast)
+	require.NotNil(t, patched.CacheCreationInputTokenCostAbove1hrAbove272kTokensUltrafast)
+	for name, got := range map[string]*float64{
+		"above_272k": patched.CacheCreationInputTokenCostAbove1hrAbove272kTokens, "priority": patched.CacheCreationInputTokenCostAbove1hrPriority,
+		"above_272k_priority": patched.CacheCreationInputTokenCostAbove1hrAbove272kTokensPriority, "flex": patched.CacheCreationInputTokenCostAbove1hrFlex,
+		"flex_above_272k": patched.CacheCreationInputTokenCostAbove1hrFlexAbove272kTokens,
+	} {
+		assert.NotNil(t, got, name)
+	}
+	assert.Equal(t, 0.00004, *patched.CacheCreationInputTokenCostAbove1hrAbove272kTokensPriority)
+}
+
 // TestPatchPricing_TimeOfDayFields covers the two peak/off-peak fields. The
 // multiplier rides the *float64 loop; PeakHours is patched separately because
 // it is a struct pointer, so both paths need pinning.

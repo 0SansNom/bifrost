@@ -3191,6 +3191,13 @@ var pricingSyncUpdateColumns = []string{
 	"cache_creation_input_token_cost_above_272k_tokens_ultrafast",
 	"cache_creation_input_token_cost_fast",
 	"cache_creation_input_token_cost_above_1hr_fast",
+	"cache_creation_input_token_cost_above_1hr_above_272k_tokens",
+	"cache_creation_input_token_cost_above_1hr_priority",
+	"cache_creation_input_token_cost_above_1hr_above_272k_priority",
+	"cache_creation_input_token_cost_above_1hr_flex",
+	"cache_creation_input_token_cost_above_1hr_flex_above_272k",
+	"cache_creation_input_token_cost_above_1hr_ultrafast",
+	"cache_creation_input_token_cost_above_1hr_above_272k_ultrafast",
 	"cache_read_input_token_cost_fast",
 	"inference_geo_us_multiplier",
 	// Costs - Image

@@ -1010,7 +1010,7 @@ func computeTextCost(pricing *configstoreTables.TableModelPricing, usage *schema
 		cachedReadTokens = usage.PromptTokensDetails.CachedReadTokens
 		cachedWriteTokens = usage.PromptTokensDetails.CachedWriteTokens
 		if usage.PromptTokensDetails.CachedWriteTokenDetails != nil {
-			cachedWriteTokensAbove1hr = usage.PromptTokensDetails.CachedWriteTokenDetails.CachedWriteTokens1h
+			cachedWriteTokensAbove1hr = usage.PromptTokensDetails.CachedWriteTokenDetails.LongTTLTokens()
 		}
 	}
 
@@ -1235,7 +1235,7 @@ func computeBatchTextCost(pricing *configstoreTables.TableModelPricing, usage *s
 			cachedReadTokens = usage.PromptTokensDetails.CachedReadTokens
 			cachedWriteTokens = usage.PromptTokensDetails.CachedWriteTokens
 			if usage.PromptTokensDetails.CachedWriteTokenDetails != nil {
-				cachedWriteTokensAbove1hr = usage.PromptTokensDetails.CachedWriteTokenDetails.CachedWriteTokens1h
+				cachedWriteTokensAbove1hr = usage.PromptTokensDetails.CachedWriteTokenDetails.LongTTLTokens()
 			}
 		}
 		cachedReadTokens = min(max(cachedReadTokens, 0), promptTokens)
@@ -1286,7 +1286,9 @@ func computeBatchTextCost(pricing *configstoreTables.TableModelPricing, usage *s
 				cacheWriteRate = *pricing.CacheCreationInputTokenCostAbove100kTokens * batchRatio
 			}
 
-			if promptTokens > TokenTierAbove200K && pricing.CacheCreationInputTokenCostAbove1hrAbove200kTokens != nil {
+			if promptTokens > TokenTierAbove272K && pricing.CacheCreationInputTokenCostAbove1hrAbove272kTokens != nil {
+				cacheWriteAbove1hrRate = *pricing.CacheCreationInputTokenCostAbove1hrAbove272kTokens * batchRatio
+			} else if promptTokens > TokenTierAbove200K && pricing.CacheCreationInputTokenCostAbove1hrAbove200kTokens != nil {
 				cacheWriteAbove1hrRate = *pricing.CacheCreationInputTokenCostAbove1hrAbove200kTokens * batchRatio
 			} else if promptTokens > TokenTierAbove100K && pricing.CacheCreationInputTokenCostAbove1hrAbove100kTokens != nil {
 				cacheWriteAbove1hrRate = *pricing.CacheCreationInputTokenCostAbove1hrAbove100kTokens * batchRatio
@@ -1454,7 +1456,7 @@ func computeDecisionCost(pricing *configstoreTables.TableModelPricing, usage *sc
 		cachedReadTokens = min(max(details.CachedReadTokens, 0), usage.PromptTokens)
 		cachedWriteTokens = min(max(details.CachedWriteTokens, 0), usage.PromptTokens-cachedReadTokens)
 		if details.CachedWriteTokenDetails != nil {
-			cachedWriteTokensAbove1hr = min(max(details.CachedWriteTokenDetails.CachedWriteTokens1h, 0), cachedWriteTokens)
+			cachedWriteTokensAbove1hr = min(max(details.CachedWriteTokenDetails.LongTTLTokens(), 0), cachedWriteTokens)
 		}
 	}
 	if cachedReadTokens == 0 && cachedWriteTokens == 0 {
@@ -2351,6 +2353,34 @@ func tieredCacheCreationInputAbove1hrTokenRate(pricing *configstoreTables.TableM
 	// Fast mode (Anthropic) is a flat rate across the full context window.
 	if tier.isFast && pricing.CacheCreationInputTokenCostAbove1hrFast != nil {
 		return *pricing.CacheCreationInputTokenCostAbove1hrFast
+	}
+	// OpenAI 12h writes are tiered like tieredCacheCreationInputTokenRate.
+	if tier.isUltrafast {
+		if totalTokens > TokenTierAbove272K && pricing.CacheCreationInputTokenCostAbove1hrAbove272kTokensUltrafast != nil {
+			return *pricing.CacheCreationInputTokenCostAbove1hrAbove272kTokensUltrafast
+		}
+		if pricing.CacheCreationInputTokenCostAbove1hrUltrafast != nil {
+			return *pricing.CacheCreationInputTokenCostAbove1hrUltrafast
+		}
+	}
+	if tier.isFlex {
+		if totalTokens > TokenTierAbove272K && pricing.CacheCreationInputTokenCostAbove1hrFlexAbove272kTokens != nil {
+			return *pricing.CacheCreationInputTokenCostAbove1hrFlexAbove272kTokens
+		}
+		if pricing.CacheCreationInputTokenCostAbove1hrFlex != nil {
+			return *pricing.CacheCreationInputTokenCostAbove1hrFlex
+		}
+	}
+	if tier.isPriority {
+		if totalTokens > TokenTierAbove272K && pricing.CacheCreationInputTokenCostAbove1hrAbove272kTokensPriority != nil {
+			return *pricing.CacheCreationInputTokenCostAbove1hrAbove272kTokensPriority
+		}
+		if pricing.CacheCreationInputTokenCostAbove1hrPriority != nil {
+			return *pricing.CacheCreationInputTokenCostAbove1hrPriority
+		}
+	}
+	if totalTokens > TokenTierAbove272K && pricing.CacheCreationInputTokenCostAbove1hrAbove272kTokens != nil {
+		return *pricing.CacheCreationInputTokenCostAbove1hrAbove272kTokens
 	}
 	if totalTokens > TokenTierAbove200K && pricing.CacheCreationInputTokenCostAbove1hrAbove200kTokens != nil {
 		return *pricing.CacheCreationInputTokenCostAbove1hrAbove200kTokens

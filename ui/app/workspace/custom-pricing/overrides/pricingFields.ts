@@ -317,6 +317,48 @@ export const PRICING_FIELDS = [
 		requestTypeGroups: ["chat"],
 	},
 	{
+		key: "cache_creation_input_token_cost_above_1hr_above_272k_tokens",
+		labelKey: "customPricing.fields.cache_creation_input_token_cost_above_1hr_above_272k_tokens",
+		group: "chat",
+		requestTypeGroups: ["chat"],
+	},
+	{
+		key: "cache_creation_input_token_cost_above_1hr_priority",
+		labelKey: "customPricing.fields.cache_creation_input_token_cost_above_1hr_priority",
+		group: "chat",
+		requestTypeGroups: ["chat"],
+	},
+	{
+		key: "cache_creation_input_token_cost_above_1hr_above_272k_tokens_priority",
+		labelKey: "customPricing.fields.cache_creation_input_token_cost_above_1hr_above_272k_tokens_priority",
+		group: "chat",
+		requestTypeGroups: ["chat"],
+	},
+	{
+		key: "cache_creation_input_token_cost_above_1hr_flex",
+		labelKey: "customPricing.fields.cache_creation_input_token_cost_above_1hr_flex",
+		group: "chat",
+		requestTypeGroups: ["chat"],
+	},
+	{
+		key: "cache_creation_input_token_cost_above_1hr_flex_above_272k_tokens",
+		labelKey: "customPricing.fields.cache_creation_input_token_cost_above_1hr_flex_above_272k_tokens",
+		group: "chat",
+		requestTypeGroups: ["chat"],
+	},
+	{
+		key: "cache_creation_input_token_cost_above_1hr_ultrafast",
+		labelKey: "customPricing.fields.cache_creation_input_token_cost_above_1hr_ultrafast",
+		group: "chat",
+		requestTypeGroups: ["chat"],
+	},
+	{
+		key: "cache_creation_input_token_cost_above_1hr_above_272k_tokens_ultrafast",
+		labelKey: "customPricing.fields.cache_creation_input_token_cost_above_1hr_above_272k_tokens_ultrafast",
+		group: "chat",
+		requestTypeGroups: ["chat"],
+	},
+	{
 		key: "cache_read_input_token_cost_fast",
 		labelKey: "customPricing.fields.cache_read_input_token_cost_fast",
 		group: "chat",
