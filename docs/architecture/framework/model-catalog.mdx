@@ -163,6 +163,13 @@ type PricingEntry struct {
     CacheCreationInputTokenCostAbove100kTokens         *float64 `json:"cache_creation_input_token_cost_above_100k_tokens,omitempty"`
     CacheReadInputTokenCostAbove100kTokens             *float64 `json:"cache_read_input_token_cost_above_100k_tokens,omitempty"`
     CacheCreationInputTokenCostAbove1hrAbove100kTokens *float64 `json:"cache_creation_input_token_cost_above_1hr_above_100k_tokens,omitempty"`
+    CacheCreationInputTokenCostAbove1hrAbove272kTokens *float64 `json:"cache_creation_input_token_cost_above_1hr_above_272k_tokens,omitempty"`
+    CacheCreationInputTokenCostAbove1hrPriority        *float64 `json:"cache_creation_input_token_cost_above_1hr_priority,omitempty"`
+    CacheCreationInputTokenCostAbove1hrAbove272kTokensPriority *float64 `json:"cache_creation_input_token_cost_above_1hr_above_272k_tokens_priority,omitempty"`
+    CacheCreationInputTokenCostAbove1hrFlex            *float64 `json:"cache_creation_input_token_cost_above_1hr_flex,omitempty"`
+    CacheCreationInputTokenCostAbove1hrFlexAbove272kTokens *float64 `json:"cache_creation_input_token_cost_above_1hr_flex_above_272k_tokens,omitempty"`
+    CacheCreationInputTokenCostAbove1hrUltrafast       *float64 `json:"cache_creation_input_token_cost_above_1hr_ultrafast,omitempty"`
+    CacheCreationInputTokenCostAbove1hrAbove272kTokensUltrafast *float64 `json:"cache_creation_input_token_cost_above_1hr_above_272k_tokens_ultrafast,omitempty"`
     CacheCreationInputAudioTokenCost                   *float64 `json:"cache_creation_input_audio_token_cost,omitempty"`
     CacheReadInputTokenCostPriority                    *float64 `json:"cache_read_input_token_cost_priority,omitempty"`
 

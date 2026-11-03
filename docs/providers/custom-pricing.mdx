@@ -379,6 +379,13 @@ Any field you set (including `0`) is applied as an override; omitted fields are 
 | `cache_creation_input_token_cost_above_272k_tokens_ultrafast` | Cache creation above 272k context for ultrafast requests |
 | `cache_creation_input_token_cost_fast` | Cache creation cost for fast-mode requests (flat across the full context window - no tiering) |
 | `cache_creation_input_token_cost_above_1hr_fast` | Cache creation cost for fast-mode requests with 1hr+ TTL entries |
+| `cache_creation_input_token_cost_above_1hr_above_272k_tokens` | Cache creation above 272k context for 1hr+ TTL entries (OpenAI 12h) |
+| `cache_creation_input_token_cost_above_1hr_priority` | Priority cache creation cost for 1hr+ TTL entries (OpenAI 12h) |
+| `cache_creation_input_token_cost_above_1hr_above_272k_tokens_priority` | Cache creation above 272k context for priority requests with 1hr+ TTL entries (OpenAI 12h) |
+| `cache_creation_input_token_cost_above_1hr_flex` | Flex cache creation cost for 1hr+ TTL entries (OpenAI 12h) |
+| `cache_creation_input_token_cost_above_1hr_flex_above_272k_tokens` | Cache creation above 272k context for flex requests with 1hr+ TTL entries (OpenAI 12h) |
+| `cache_creation_input_token_cost_above_1hr_ultrafast` | Ultrafast cache creation cost for 1hr+ TTL entries (OpenAI 12h) |
+| `cache_creation_input_token_cost_above_1hr_above_272k_tokens_ultrafast` | Cache creation above 272k context for ultrafast requests with 1hr+ TTL entries (OpenAI 12h) |
 | `cache_read_input_token_cost_fast` | Cache read cost for fast-mode requests (flat across the full context window - no tiering) |
 
 ### Image costs
