@@ -5617,3 +5617,47 @@ func BenchmarkToOpenAIResponsesRequestReasoningReplay(b *testing.B) {
 		})
 	}
 }
+
+// Codex replays assistant message items carrying summary:null and encrypted_content.
+// Those fields decode into the embedded ResponsesReasoning, which used to route the
+// item through reasoning handling: content was stripped (OpenAI: "Missing required
+// parameter: 'input[N].content'") and summary was re-emitted (OpenAI rejects it on a
+// message), or, for non-reasoning models, the whole assistant turn was dropped.
+func TestToOpenAIResponsesRequest_MessageItemWithEncryptedContent(t *testing.T) {
+	const assistant = `{"type":"message","role":"assistant","status":"completed","phase":"final_answer","content":[{"type":"output_text","text":"ok","annotations":[]}],"summary":null,"encrypted_content":"gAAAA"}`
+	tests := []struct {
+		name          string
+		model         string
+		wantEncrypted bool
+	}{
+		{name: "reasoning model keeps encrypted_content", model: "gpt-5-mini", wantEncrypted: true},
+		{name: "non-reasoning model strips encrypted_content", model: "gpt-4o", wantEncrypted: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			body := `{"model":"` + tt.model + `","input":[{"role":"user","content":"hi"},` + assistant + `,{"role":"user","content":"hi again"}]}`
+			var request OpenAIResponsesRequest
+			require.NoError(t, sonic.Unmarshal([]byte(body), &request))
+			bifrostRequest := request.ToBifrostResponsesRequest(nil)
+			bifrostRequest.Provider = schemas.OpenAI
+
+			wire, err := sonic.Marshal(ToOpenAIResponsesRequest(nil, bifrostRequest))
+			require.NoError(t, err)
+			var payload struct {
+				Input []map[string]json.RawMessage `json:"input"`
+			}
+			require.NoError(t, sonic.Unmarshal(wire, &payload))
+			require.Len(t, payload.Input, 3, "assistant turn must not be dropped: %s", wire)
+
+			item := payload.Input[1]
+			require.JSONEq(t, `[{"type":"output_text","text":"ok","annotations":[]}]`, string(item["content"]), "content must survive: %s", wire)
+			require.NotContains(t, item, "summary", "OpenAI rejects summary on a message item: %s", wire)
+			require.JSONEq(t, `"final_answer"`, string(item["phase"]))
+			if tt.wantEncrypted {
+				require.JSONEq(t, `"gAAAA"`, string(item["encrypted_content"]))
+			} else {
+				require.NotContains(t, item, "encrypted_content")
+			}
+		})
+	}
+}
