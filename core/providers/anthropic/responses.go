@@ -1935,6 +1935,13 @@ func (chunk *AnthropicStreamEvent) ToBifrostResponsesStream(ctx context.Context,
 					},
 				}
 
+				// Claude calling a client-run tool_search goes back as the caller's
+				// tool_search_call; its arguments arrive whole on output_item.done.
+				if restoreClientToolSearchCall(item, clientToolSearchFrom(ctx)) {
+					item.Status = &statusInProgress
+					item.Arguments = nil
+				}
+
 				// Initialize argument buffer for this tool call
 				state.ToolArgumentBuffers[outputIndex] = ""
 
@@ -2208,6 +2215,10 @@ func (chunk *AnthropicStreamEvent) ToBifrostResponsesStream(ctx context.Context,
 					// Check if this is the structured output tool - if so, just accumulate without emitting
 					if state.StructuredOutputIndex != nil && *state.StructuredOutputIndex == outputIndex {
 						// This is the structured output tool - accumulate without emitting delta events
+						return nil, nil, false
+					}
+					// A client tool_search_call has no argument events; done carries them.
+					if isStreamedClientToolSearchCall(state, outputIndex) {
 						return nil, nil, false
 					}
 
@@ -3023,7 +3034,15 @@ func (chunk *AnthropicStreamEvent) ToBifrostResponsesStream(ctx context.Context,
 			// Check if this is a tool call (function_call or MCP call)
 			// If we have accumulated arguments, emit appropriate arguments.done first
 			// Note: we check hasArgs only (not accumulatedArgs != "") to handle zero-arg tool calls
-			if accumulatedArgs, hasArgs := state.ToolArgumentBuffers[outputIndex]; hasArgs {
+			if accumulatedArgs, hasArgs := state.ToolArgumentBuffers[outputIndex]; hasArgs && isStreamedClientToolSearchCall(state, outputIndex) {
+				if accumulatedArgs == "" {
+					accumulatedArgs = "{}"
+				}
+				storedItem := state.OutputItems[outputIndex]
+				storedItem.ResponsesToolMessage.Arguments = &accumulatedArgs
+				storedItem.Status = schemas.Ptr("completed")
+				delete(state.ToolArgumentBuffers, outputIndex)
+			} else if hasArgs {
 				// Update the stored output item with the final arguments
 				if storedItem, exists := state.OutputItems[outputIndex]; exists && storedItem.ResponsesToolMessage != nil {
 					storedItem.ResponsesToolMessage.Arguments = &accumulatedArgs
@@ -4850,6 +4869,10 @@ func ToAnthropicResponsesRequest(ctx *schemas.BifrostContext, bifrostReq *schema
 	if err != nil {
 		return nil, err
 	}
+	if hasClientToolSearchTool(requestTools) {
+		ctx.SetValue(anthropicEgressClientToolSearchKey, clientToolSearchFunctionName)
+		input = rewriteClientToolSearchHistory(input, bifrostReq.NamespaceToolAliases)
+	}
 	// Fable 5.1+ rejects tool_choice "any"/"tool" outright, so every forced
 	// choice below — the caller's and the synthetic structured-output pin — is
 	// dropped and the model answers under the default "auto".
@@ -5550,6 +5573,11 @@ func (response *AnthropicMessageResponse) ToBifrostResponsesResponse(ctx *schema
 						}
 						m.ResponsesToolMessage.ResponsesCodeExecutionCall.ContainerExpiresAt = response.Container.ExpiresAt
 					}
+				}
+			}
+			if searchName := clientToolSearchFrom(ctx); searchName != "" {
+				for i := range outputMessages {
+					restoreClientToolSearchCall(&outputMessages[i], searchName)
 				}
 			}
 			bifrostResp.Output = outputMessages
@@ -10443,6 +10471,10 @@ func convertBifrostToolToAnthropic(caps schemas.ModelCaps, tool *schemas.Respons
 		}
 		return anthropicTool
 	case schemas.ResponsesToolTypeToolSearch:
+		if isClientToolSearchTool(tool) {
+			// The caller runs this search over tools only it holds; see clienttoolsearch.go.
+			return clientToolSearchFunction(tool)
+		}
 		toolSearchType := AnthropicToolTypeToolSearchBM2520251119
 		toolSearchName := AnthropicToolNameToolSearchBM25
 		if tool.Name != nil && strings.Contains(*tool.Name, "regex") {

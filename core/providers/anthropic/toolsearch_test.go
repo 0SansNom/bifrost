@@ -1188,3 +1188,122 @@ func TestToolSearch_AnthropicResponseRendersResultContent(t *testing.T) {
 	assert.Equal(t, AnthropicContentBlockTypeToolSearchToolResult, resp.Content[1].Type)
 	assertNestedToolSearchResult(t, &resp.Content[1], []string{tsDiscoveredTool})
 }
+
+// codexClientToolSearchCtx converts a Codex-shaped request carrying a client-run
+// tool_search, the way the gateway does before dispatch, and returns its context.
+func codexClientToolSearchCtx(t *testing.T) *schemas.BifrostContext {
+	t.Helper()
+	ctx := schemas.NewBifrostContext(context.Background(), schemas.NoDeadline)
+	req := &schemas.BifrostResponsesRequest{
+		Provider: schemas.Anthropic,
+		Model:    "claude-sonnet-4-6",
+		Input:    []schemas.ResponsesMessage{{Role: schemas.Ptr(schemas.ResponsesInputMessageRoleUser), Content: &schemas.ResponsesMessageContent{ContentStr: schemas.Ptr("file an issue")}}},
+		Params: &schemas.ResponsesParameters{Tools: []schemas.ResponsesTool{
+			responsesToolFromJSON(t, `{"type":"tool_search","execution":"client","parameters":{"type":"object","properties":{"query":{"type":"string"}}}}`),
+		}},
+	}
+	_, err := ToAnthropicResponsesRequest(ctx, req)
+	require.NoError(t, err)
+	return ctx
+}
+
+// assertCodexClientToolSearchCall checks item is the client tool_search_call Codex
+// dispatches: execution client, the tool_use id as call_id, the query as an object.
+func assertCodexClientToolSearchCall(t *testing.T, item *schemas.ResponsesMessage) {
+	t.Helper()
+	require.NotNil(t, item)
+	require.NotNil(t, item.Type)
+	assert.Equal(t, schemas.ResponsesMessageTypeToolSearchCall, *item.Type)
+	encoded, err := sonic.Marshal(item)
+	require.NoError(t, err)
+	body := string(encoded)
+	assert.Contains(t, body, `"execution":"client"`)
+	assert.Contains(t, body, `"call_id":"toolu_search_1"`)
+	assert.Contains(t, body, `"arguments":{"query":"linear issue"}`, "Codex reads arguments as a JSON object")
+	assert.NotContains(t, body, `"name":`, "OpenAI's tool_search_call carries no name")
+}
+
+// Claude's call to the client tool_search function comes back to Codex as a
+// tool_search_call it runs itself, not a function_call it has no handler for.
+func TestToolSearch_CodexClientCallNonStreaming(t *testing.T) {
+	t.Parallel()
+	ctx := codexClientToolSearchCtx(t)
+	resp := &AnthropicMessageResponse{
+		ID: "msg_codex_ts", Type: "message", Role: "assistant", Model: "claude-sonnet-4-6",
+		StopReason: AnthropicStopReasonToolUse,
+		Content: []AnthropicContentBlock{{
+			Type:  AnthropicContentBlockTypeToolUse,
+			ID:    schemas.Ptr("toolu_search_1"),
+			Name:  schemas.Ptr("tool_search"),
+			Input: json.RawMessage(`{"query":"linear issue"}`),
+		}},
+	}
+	out := resp.ToBifrostResponsesResponse(ctx)
+	require.NotNil(t, out)
+	require.Len(t, out.Output, 1)
+	assertCodexClientToolSearchCall(t, &out.Output[0])
+}
+
+// A function the caller itself named tool_search (Claude Code's own search, no
+// client tool_search tool declared) stays a function_call.
+func TestToolSearch_CallerFunctionNamedToolSearchStaysFunctionCall(t *testing.T) {
+	t.Parallel()
+	ctx := schemas.NewBifrostContext(context.Background(), schemas.NoDeadline)
+	resp := &AnthropicMessageResponse{
+		ID: "msg_cc_ts", Type: "message", Role: "assistant", Model: "claude-sonnet-4-6",
+		Content: []AnthropicContentBlock{{
+			Type: AnthropicContentBlockTypeToolUse, ID: schemas.Ptr("toolu_search_1"),
+			Name: schemas.Ptr("tool_search"), Input: json.RawMessage(`{"query":"linear issue"}`),
+		}},
+	}
+	out := resp.ToBifrostResponsesResponse(ctx)
+	require.Len(t, out.Output, 1)
+	assert.Equal(t, schemas.ResponsesMessageTypeFunctionCall, *out.Output[0].Type)
+}
+
+// The streaming path emits the same tool_search_call: output_item.added/done of that
+// type, no function_call argument events (Codex has no function_call to attach them
+// to), and the item in response.completed.
+func TestToolSearch_CodexClientCallStreaming(t *testing.T) {
+	t.Parallel()
+	ctx := codexClientToolSearchCtx(t)
+	part1, part2 := `{"query":"lin`, `ear issue"}`
+	stopReason := AnthropicStopReasonToolUse
+	chunks := []*AnthropicStreamEvent{
+		{Type: AnthropicStreamEventTypeContentBlockStart, Index: schemas.Ptr(0), ContentBlock: &AnthropicContentBlock{
+			Type: AnthropicContentBlockTypeToolUse, ID: schemas.Ptr("toolu_search_1"), Name: schemas.Ptr("tool_search"), Input: json.RawMessage(`{}`),
+		}},
+		{Type: AnthropicStreamEventTypeContentBlockDelta, Index: schemas.Ptr(0), Delta: &AnthropicStreamDelta{Type: AnthropicStreamDeltaTypeInputJSON, PartialJSON: &part1}},
+		{Type: AnthropicStreamEventTypeContentBlockDelta, Index: schemas.Ptr(0), Delta: &AnthropicStreamDelta{Type: AnthropicStreamDeltaTypeInputJSON, PartialJSON: &part2}},
+		{Type: AnthropicStreamEventTypeContentBlockStop, Index: schemas.Ptr(0)},
+		{Type: AnthropicStreamEventTypeMessageDelta, Delta: &AnthropicStreamDelta{StopReason: &stopReason}},
+		{Type: AnthropicStreamEventTypeMessageStop},
+	}
+	state := newToolSearchTestState()
+	var events []*schemas.BifrostResponsesStreamResponse
+	for i, c := range chunks {
+		resps, berr, _ := c.ToBifrostResponsesStream(ctx, len(events), state)
+		require.Nil(t, berr, "chunk %d", i)
+		events = append(events, resps...)
+	}
+
+	var added, done, completed *schemas.ResponsesMessage
+	for _, e := range events {
+		switch e.Type {
+		case schemas.ResponsesStreamResponseTypeFunctionCallArgumentsDelta, schemas.ResponsesStreamResponseTypeFunctionCallArgumentsDone:
+			t.Errorf("unexpected %s for a client tool_search_call", e.Type)
+		case schemas.ResponsesStreamResponseTypeOutputItemAdded:
+			added = e.Item
+		case schemas.ResponsesStreamResponseTypeOutputItemDone:
+			done = e.Item
+		case schemas.ResponsesStreamResponseTypeCompleted:
+			require.NotNil(t, e.Response)
+			require.Len(t, e.Response.Output, 1)
+			completed = &e.Response.Output[0]
+		}
+	}
+	require.NotNil(t, added)
+	assert.Equal(t, schemas.ResponsesMessageTypeToolSearchCall, *added.Type)
+	assertCodexClientToolSearchCall(t, done)
+	assertCodexClientToolSearchCall(t, completed)
+}
